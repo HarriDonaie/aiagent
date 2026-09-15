@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 import argparse
-from config import system_prompt
+from config import system_prompt, AGENT_MAX_LOOPS
 from functions.call_function import *
 import json
 
@@ -28,34 +28,41 @@ messages = [
     {"role": "user", "content": args.user_prompt},
 ]
 
-response = client.chat.completions.create(
-    model = "openrouter/free",
-    messages = messages,
-    temperature = 0,
-    tools = available_functions,
-)
+for _ in range(AGENT_MAX_LOOPS):
+    response = client.chat.completions.create(
+        model = "openrouter/free",
+        messages = messages,
+        temperature = 0,
+        tools = available_functions,
+    )
 
-if response.usage is None:
-    raise RuntimeError("Expected: failed API request")
+    if response.usage is None:
+        raise RuntimeError("Expected: failed API request")
 
-if args.verbose == True:
-    print(f"User prompt: {args.user_prompt}")
-    print(f"Prompt tokens: {response.usage.prompt_tokens}")
-    print(f"Response tokens: {response.usage.completion_tokens}")
-#print(response.choices[0].message.content)
+    if args.verbose == True:
+        print(f"User prompt: {args.user_prompt}")
+        print(f"Prompt tokens: {response.usage.prompt_tokens}")
+        print(f"Response tokens: {response.usage.completion_tokens}")
+    #print(response.choices[0].message.content)
 
-message = response.choices[0].message
+    message = response.choices[0].message
+    messages.append(message)
 
-if message.tool_calls:
-    for tool_call in message.tool_calls:
-        function_args = json.loads(tool_call.function.arguments or "{}")
-        #print(f"Calling function: {tool_call.function.name}({function_args})")
-        result_message = call_function(tool_call, args.verbose)
-        if not result_message["content"]:
-            raise Exception("The returned tool message should have a non-empty 'content'")
-        if args.verbose:
-            print(f"-> {result_message['content']}")
-else:
-    print(message.content)
+    if message.tool_calls:
+        for tool_call in message.tool_calls:
+            function_args = json.loads(tool_call.function.arguments or "{}")
+            #print(f"Calling function: {tool_call.function.name}({function_args})")
+            result_message = call_function(tool_call, args.verbose)
+            messages.append(result_message)
+            if not result_message["content"]:
+                raise Exception("The returned tool message should have a non-empty 'content'")
+            if args.verbose:
+                print(f"-> {result_message['content']}")
+    else:
+        print(message.content)
+        break
+    if _ == AGENT_MAX_LOOPS:
+        print(f"Exceeded maximum number of loop iterations: {AGENT_MAX_LOOPS}")
+        exit(1)
 
     

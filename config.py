@@ -1,5 +1,7 @@
 MAX_CHARS = 10000
 
+AGENT_MAX_LOOPS = 20
+
 system_prompt = """
 You are a helpful AI coding agent.
 
